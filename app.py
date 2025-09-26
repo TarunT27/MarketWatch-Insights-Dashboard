@@ -9,9 +9,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from sklearn.linear_model import LinearRegression
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 
 from alerts import build_email_body, send_email_summary, smtp_credentials_available
 from data_fetcher import DEFAULT_TICKERS, get_news_articles, get_stock_data
@@ -91,6 +88,30 @@ def build_predictive_features(data: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _fit_linear_regression(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float, float] | None:
+    """Return (weights, intercept, r2) using a simple least-squares fit."""
+
+    if len(X) != len(y) or len(X) == 0:
+        return None
+
+    X_augmented = np.column_stack([np.ones(len(X)), X])
+    try:
+        coeffs, residuals, rank, _ = np.linalg.lstsq(X_augmented, y, rcond=None)
+    except np.linalg.LinAlgError:
+        return None
+
+    if rank < X_augmented.shape[1]:
+        return None
+
+    intercept = float(coeffs[0])
+    weights = coeffs[1:].astype(float)
+    predictions = X_augmented @ coeffs
+    ss_res = float(np.sum((y - predictions) ** 2))
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+    return weights, intercept, r2
+
+
 def run_predictive_model(data: pd.DataFrame) -> dict[str, float | str] | None:
     if data.empty or data["headline_count"].sum() == 0 or len(data) < 6:
         return None
@@ -119,17 +140,21 @@ def run_predictive_model(data: pd.DataFrame) -> dict[str, float | str] | None:
     if len(features_df) < 3 or np.allclose(y, y[0]):
         return None
 
-    model = Pipeline(
-        [
-            ("scaler", StandardScaler()),
-            ("regressor", LinearRegression()),
-        ]
-    )
-    model.fit(X, y)
-    r2_score = float(model.score(X, y))
+    # Standardize features manually to keep the regression numerically stable.
+    X_mean = X.mean(axis=0)
+    X_std = X.std(axis=0, ddof=0)
+    X_std[X_std == 0] = 1
+    X_scaled = (X - X_mean) / X_std
 
-    latest_features = features_df[feature_cols].iloc[-1].to_numpy().reshape(1, -1)
-    predicted_return = float(model.predict(latest_features)[0])
+    fit = _fit_linear_regression(X_scaled, y)
+    if fit is None:
+        return None
+
+    weights, intercept, r2_score = fit
+
+    latest_features = features_df[feature_cols].iloc[-1].to_numpy()
+    latest_scaled = (latest_features - X_mean) / X_std
+    predicted_return = float(np.dot(weights, latest_scaled) + intercept)
 
     return {
         "predicted_return": predicted_return,
