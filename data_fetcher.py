@@ -90,7 +90,11 @@ def get_news_articles(
                 page_size=page_size,
             )
         except NewsAPIException as exc:  # pragma: no cover - depends on remote API behaviour
-            message = getattr(exc, "message", None) or str(exc)
+            message = getattr(exc, "get_message", None)
+            if callable(message):
+                message = message()
+            if not message:
+                message = str(exc)
             if message:
                 message = f"NewsAPI request failed: {message}"
             return _empty_news_frame(message)

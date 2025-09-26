@@ -28,7 +28,14 @@ def load_stock_data(ticker: str, start_date: datetime, end_date: datetime) -> pd
 
 @st.cache_data(show_spinner=False)
 def load_news_data(ticker: str, start_date: datetime, end_date: datetime, api_key: str) -> pd.DataFrame:
-    return get_news_articles(ticker, start_date, end_date, api_key=api_key)
+    try:
+        return get_news_articles(ticker, start_date, end_date, api_key=api_key)
+    except Exception as exc:  # pragma: no cover - defensive cache wrapper
+        fallback = pd.DataFrame(
+            {col: pd.Series(dtype="object") for col in ["title", "description", "url", "publishedAt", "source", "ticker"]}
+        )
+        fallback.attrs["warning"] = f"Unable to load headlines: {exc}"
+        return fallback
 
 
 def prepare_sentiment_summary(news_df: pd.DataFrame) -> pd.DataFrame:
