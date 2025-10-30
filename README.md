@@ -75,7 +75,7 @@ This launches the dashboard at `http://localhost:8501`. Use the sidebar to toggl
 - **Email alerts**: Provide a recipient address in the sidebar to send the latest insights (optionally with CSV attachment) once SMTP credentials are configured.
 - **Predictive modeling**: Expand the date range to give the regression model more training data and generate a clearer next-day signal.
 
-## Resume-Description
+
 > *MarketWatch Insights Dashboard (Python, Streamlit, Hugging Face, Yahoo Finance API)* — Developed a real-time dashboard integrating stock data and financial news sentiment using AI-powered NLP models. Built interactive visualizations to analyze correlations between news headlines and stock price movements. Deployed a live application on Streamlit Cloud for public access and recruiter demonstrations.
 
 ## License
