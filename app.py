@@ -69,9 +69,10 @@ def merge_stock_and_sentiment(stock_df: pd.DataFrame, sentiment_summary: pd.Data
         how="left",
         left_on="date_only",
         right_on="date",
+        suffixes=("", "_sentiment"),
     )
-    merged = merged.drop(columns=["date"])
-    merged = merged.rename(columns={"date_only": "date"})
+    merged = merged.drop(columns=["date_sentiment", "date"], errors="ignore")
+    merged = merged.rename(columns={"date_only": "date", "date_x": "date"})
     merged[["avg_sentiment", "positive_count", "negative_count", "neutral_count", "headline_count"]] = (
         merged[["avg_sentiment", "positive_count", "negative_count", "neutral_count", "headline_count"]].fillna(0)
     )
@@ -83,7 +84,7 @@ def build_predictive_features(data: pd.DataFrame) -> pd.DataFrame:
         return data
 
     df = data.sort_values("date").copy()
-    df["return"] = df["Close"].pct_change()
+    df["return"] = df["Close"].pct_change().fillna(0)
     df["sentiment_change"] = df["avg_sentiment"].diff().fillna(0)
     df["volume_change"] = df["Volume"].pct_change().fillna(0)
     df["target_return"] = df["return"].shift(-1)
@@ -219,7 +220,12 @@ if refresh_requested:
 start_dt = datetime.combine(start_date, datetime.min.time())
 end_dt = datetime.combine(end_date, datetime.max.time())
 
-newsapi_key = st.secrets.get("newsapi_key") or os.getenv("NEWSAPI_KEY", "")
+newsapi_key = os.getenv("NEWSAPI_KEY", "")
+if not newsapi_key:
+    try:
+        newsapi_key = st.secrets.get("newsapi_key", "")
+    except Exception:
+        newsapi_key = ""
 if not newsapi_key:
     st.warning(
         "NewsAPI key not found. Add it to Streamlit secrets or the NEWSAPI_KEY environment variable to load headlines."
