@@ -91,6 +91,7 @@ def build_predictive_features(data: pd.DataFrame) -> pd.DataFrame:
     df["sentiment_change"] = df["avg_sentiment"].diff().fillna(0)
     df["volume_change"] = df["Volume"].pct_change().fillna(0)
     df["target_return"] = df["return"].shift(-1)
+    df = df.replace([np.inf, -np.inf], np.nan)
     df = df.dropna(subset=["return", "sentiment_change", "volume_change", "target_return", "avg_sentiment"])
     return df
 
@@ -252,8 +253,16 @@ start_dt = datetime.combine(start_date, datetime.min.time())
 end_dt = datetime.combine(end_date, datetime.max.time())
 
 try:
-    newsapi_key = st.secrets.get("newsapi_key")
+    secrets = st.secrets
 except Exception:
+    secrets = None
+
+if secrets is not None:
+    try:
+        newsapi_key = secrets.get("newsapi_key")
+    except Exception:
+        newsapi_key = None
+else:
     newsapi_key = None
 
 newsapi_key = newsapi_key or os.getenv("NEWSAPI_KEY", "")
