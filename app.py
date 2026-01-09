@@ -20,6 +20,8 @@ st.set_page_config(
     page_icon="📈",
 )
 
+BENCHMARK_TICKERS = ["SPY", "QQQ", "DIA", "IWM"]
+
 
 @st.cache_data(show_spinner=False)
 def load_stock_data(ticker: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
@@ -170,6 +172,19 @@ def run_predictive_model(data: pd.DataFrame) -> dict[str, float | str] | None:
     }
 
 
+def normalize_price_series(data: pd.DataFrame, value_col: str = "Close") -> pd.DataFrame:
+    if data.empty or value_col not in data.columns:
+        return data
+
+    df = data.sort_values("date").copy()
+    baseline = df[value_col].dropna().iloc[0] if not df[value_col].dropna().empty else np.nan
+    if not baseline or pd.isna(baseline):
+        df["normalized_close"] = np.nan
+    else:
+        df["normalized_close"] = (df[value_col] / baseline) * 100
+    return df
+
+
 def correlation_insight_text(data: pd.DataFrame) -> str:
     if data.empty or data["headline_count"].sum() == 0:
         return "No sentiment data available for the selected range."
@@ -202,6 +217,12 @@ with st.sidebar:
     )
 
     export_enabled = st.checkbox("Enable CSV export", value=True)
+
+    st.markdown("---")
+    st.header("Benchmarks")
+    selected_benchmarks = [
+        benchmark for benchmark in BENCHMARK_TICKERS if st.checkbox(benchmark, key=f"benchmark_{benchmark}")
+    ]
 
     st.markdown("---")
     st.header("Daily Email Summary")
@@ -265,6 +286,11 @@ if not newsapi_key:
 with st.spinner("Fetching latest market data..."):
     stock_df = load_stock_data(ticker, start_dt, end_dt)
 
+with st.spinner("Loading benchmark comparisons..."):
+    benchmark_frames = {
+        benchmark: load_stock_data(benchmark, start_dt, end_dt) for benchmark in selected_benchmarks
+    }
+
 with st.spinner("Collecting news and sentiment scores..."):
     news_df = load_news_data(ticker, start_dt, end_dt, api_key=newsapi_key) if newsapi_key else pd.DataFrame()
     analyzer = SentimentAnalyzer(mode=sentiment_mode)
@@ -288,14 +314,36 @@ left_col, right_col = st.columns(2)
 
 with left_col:
     st.subheader("Stock Price Trend")
-    price_fig = px.line(
-        combined_df,
-        x="date",
-        y="Close",
-        title=f"{ticker} Closing Prices",
-        labels={"date": "Date", "Close": "Close Price (USD)"},
+    normalized_main = normalize_price_series(combined_df)
+    price_fig = go.Figure()
+    price_fig.add_trace(
+        go.Scatter(
+            x=normalized_main["date"],
+            y=normalized_main["normalized_close"],
+            name=ticker,
+            mode="lines",
+            line=dict(color="#1f77b4", width=2.5),
+        )
     )
-    price_fig.update_layout(showlegend=False, height=400)
+    for benchmark, frame in benchmark_frames.items():
+        normalized_benchmark = normalize_price_series(frame)
+        if normalized_benchmark.empty:
+            continue
+        price_fig.add_trace(
+            go.Scatter(
+                x=normalized_benchmark["date"],
+                y=normalized_benchmark["normalized_close"],
+                name=benchmark,
+                mode="lines",
+                line=dict(width=1.5),
+            )
+        )
+    price_fig.update_layout(
+        height=400,
+        title=f"{ticker} vs Benchmarks (Normalized)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        yaxis_title="Indexed Performance (Start = 100)",
+    )
     st.plotly_chart(price_fig, use_container_width=True)
 
 with right_col:
