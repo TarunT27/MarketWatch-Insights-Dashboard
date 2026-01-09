@@ -23,18 +23,25 @@ st.set_page_config(
 
 @st.cache_data(show_spinner=False)
 def load_stock_data(ticker: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
-    return get_stock_data(ticker, start_date, end_date)
+    data = get_stock_data(ticker, start_date, end_date)
+    data = data.copy()
+    data.attrs["fetched_at"] = datetime.now()
+    return data
 
 
 @st.cache_data(show_spinner=False)
 def load_news_data(ticker: str, start_date: datetime, end_date: datetime, api_key: str) -> pd.DataFrame:
     try:
-        return get_news_articles(ticker, start_date, end_date, api_key=api_key)
+        data = get_news_articles(ticker, start_date, end_date, api_key=api_key)
+        data = data.copy()
+        data.attrs["fetched_at"] = datetime.now()
+        return data
     except Exception as exc:  # pragma: no cover - defensive cache wrapper
         fallback = pd.DataFrame(
             {col: pd.Series(dtype="object") for col in ["title", "description", "url", "publishedAt", "source", "ticker"]}
         )
         fallback.attrs["warning"] = f"Unable to load headlines: {exc}"
+        fallback.attrs["fetched_at"] = datetime.now()
         return fallback
 
 
@@ -188,6 +195,12 @@ def correlation_insight_text(data: pd.DataFrame) -> str:
     return "Sentiment and price movements show a weak correlation for the chosen window."
 
 
+def format_refresh_timestamp(timestamp: datetime | None) -> str:
+    if not timestamp:
+        return "Last refreshed: unavailable"
+    return f"Last refreshed: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+
+
 # Sidebar controls
 with st.sidebar:
     st.header("Analysis Options")
@@ -264,16 +277,18 @@ if not newsapi_key:
 
 with st.spinner("Fetching latest market data..."):
     stock_df = load_stock_data(ticker, start_dt, end_dt)
+stock_refreshed_at = getattr(stock_df, "attrs", {}).get("fetched_at")
 
 with st.spinner("Collecting news and sentiment scores..."):
     news_df = load_news_data(ticker, start_dt, end_dt, api_key=newsapi_key) if newsapi_key else pd.DataFrame()
     analyzer = SentimentAnalyzer(mode=sentiment_mode)
     news_df = attach_sentiment(news_df, analyzer)
     sentiment_summary = prepare_sentiment_summary(news_df)
+news_refreshed_at = getattr(news_df, "attrs", {}).get("fetched_at")
 
 news_warning = getattr(news_df, "attrs", {}).get("warning") if isinstance(news_df, pd.DataFrame) else None
 if news_warning:
-    st.warning(news_warning)
+    st.error(f"News alert: {news_warning}")
 
 combined_df = merge_stock_and_sentiment(stock_df, sentiment_summary)
 
@@ -288,6 +303,7 @@ left_col, right_col = st.columns(2)
 
 with left_col:
     st.subheader("Stock Price Trend")
+    st.caption(format_refresh_timestamp(stock_refreshed_at))
     price_fig = px.line(
         combined_df,
         x="date",
@@ -300,6 +316,7 @@ with left_col:
 
 with right_col:
     st.subheader("Daily Sentiment Breakdown")
+    st.caption(format_refresh_timestamp(news_refreshed_at))
     if sentiment_summary.empty:
         st.info("No news sentiment data available for this range.")
     else:
