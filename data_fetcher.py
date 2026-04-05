@@ -26,7 +26,7 @@ def get_stock_data(
     data = data.reset_index()
     # Flatten MultiIndex columns produced by recent yfinance versions
     if isinstance(data.columns, pd.MultiIndex):
-        data.columns = [col[0] for col in data.columns]
+        data.columns = data.columns.get_level_values(0)
     data = data.rename(columns={"Date": "date"})
     data["date"] = pd.to_datetime(data["date"]).dt.tz_localize(None)
     data["ticker"] = ticker
