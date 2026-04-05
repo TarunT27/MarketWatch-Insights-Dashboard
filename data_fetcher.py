@@ -23,7 +23,11 @@ def get_stock_data(
     data = yf.download(ticker, start=start, end=end + timedelta(days=1), interval=interval)
     if data.empty:
         return data
-    data = data.reset_index().rename(columns={"Date": "date"})
+    data = data.reset_index()
+    # Flatten MultiIndex columns produced by recent yfinance versions
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = [col[0] for col in data.columns]
+    data = data.rename(columns={"Date": "date"})
     data["date"] = pd.to_datetime(data["date"]).dt.tz_localize(None)
     data["ticker"] = ticker
     return data

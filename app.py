@@ -70,7 +70,7 @@ def merge_stock_and_sentiment(stock_df: pd.DataFrame, sentiment_summary: pd.Data
         left_on="date_only",
         right_on="date",
     )
-    merged = merged.drop(columns=["date"])
+    merged = merged.drop(columns=["date_x", "date_y"])
     merged = merged.rename(columns={"date_only": "date"})
     merged[["avg_sentiment", "positive_count", "negative_count", "neutral_count", "headline_count"]] = (
         merged[["avg_sentiment", "positive_count", "negative_count", "neutral_count", "headline_count"]].fillna(0)
