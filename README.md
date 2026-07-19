@@ -3,7 +3,7 @@
 ![SignalGlass arbitrary-symbol overview](assets/screenshots/signalglass-any-stock-desktop.png)
 
 [![CI](https://github.com/TarunT27/MarketWatch-Insights-Dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/TarunT27/MarketWatch-Insights-Dashboard/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.59-FF4B4B?logo=streamlit&logoColor=white)
 ![Coverage](https://img.shields.io/badge/branch_coverage-89%25-30D158)
 
@@ -36,6 +36,8 @@ The default experience is deterministic and works immediately. Switch to **Live*
 The picker starts with popular symbols such as AAPL, MSFT, NVDA, and TSLA, but accepts any validated Yahoo Finance-compatible ticker—for example AMD, SPY, BRK.B, `^GSPC`, or BTC-USD. The interface adapts from a dense desktop cockpit to a single-column mobile view.
 
 ## Quick start
+
+SignalGlass requires Python 3.12 or newer.
 
 ```bash
 git clone https://github.com/TarunT27/MarketWatch-Insights-Dashboard.git
@@ -110,10 +112,11 @@ External data is normalized at the provider boundary. UI modules consume a stabl
 ## Quality gates
 
 ```bash
-pip install -r requirements-dev.txt
+pip install --require-hashes -r requirements-lock.txt
 python -m ruff check .
 python -m ruff format --check .
 python -m pytest --cov=signalglass --cov-report=term-missing --cov-fail-under=80
+python -m pip_audit -r requirements-lock.txt
 ```
 
 The current suite covers provider fallbacks, validation, data alignment, charts, chronological evaluation, and app smoke behavior. GitHub Actions runs lint and coverage checks for every push and pull request.
