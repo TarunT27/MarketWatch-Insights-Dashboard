@@ -1,9 +1,8 @@
-streamlit
-yfinance
-newsapi-python
-textblob
-plotly
-pandas
-numpy
-transformers
-scikit-learn
+streamlit==1.59.2
+yfinance==1.5.1
+newsapi-python==0.2.7
+textblob==0.20.1
+plotly==6.9.0
+pandas==3.0.3
+numpy==2.5.1
+scikit-learn==1.9.0
