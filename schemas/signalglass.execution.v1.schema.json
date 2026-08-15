@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signalglass.local/schemas/signalglass.execution.v1.schema.json",
+  "title": "SignalGlass execution signals v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "signals"],
+  "properties": {
+    "schema_version": {
+      "const": "signalglass.execution.v1"
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "symbol", "model", "action", "score"],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "symbol": {
+            "type": "string",
+            "pattern": "^[A-Z0-9^.][A-Z0-9.^-]{0,19}$"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "action": {
+            "enum": ["BUY", "SELL", "HOLD"]
+          },
+          "score": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}

@@ -127,3 +127,25 @@ def test_signal_evaluation_returns_none_when_history_is_insufficient(combined_ma
     )
 
     assert result is None
+
+
+def test_model_suite_compares_multiple_walk_forward_models_without_leakage(
+    combined_market_frame,
+) -> None:
+    original = combined_market_frame.copy(deep=True)
+
+    suite = analytics_module().evaluate_model_suite(combined_market_frame, min_train_size=5)
+
+    pd.testing.assert_frame_equal(combined_market_frame, original)
+    assert suite is not None
+    assert set(suite.leaderboard["model"]) == {"linear", "ridge", "random_forest"}
+    assert suite.best_model in set(suite.leaderboard["model"])
+    assert suite.leaderboard["directional_accuracy"].between(0, 1).all()
+    assert suite.leaderboard["mean_absolute_error"].ge(0).all()
+    assert suite.leaderboard["sample_size"].nunique() == 1
+    assert tuple(suite.leaderboard["model"]) == tuple(
+        suite.leaderboard.sort_values(
+            ["directional_accuracy", "mean_absolute_error", "model"],
+            ascending=[False, True, True],
+        )["model"]
+    )

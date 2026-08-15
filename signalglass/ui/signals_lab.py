@@ -9,7 +9,8 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from signalglass.charts import make_signal_evaluation_chart
+from signalglass.charts import make_equity_curve_chart, make_signal_evaluation_chart
+from signalglass.signal_export import build_execution_signal_frame, serialize_execution_signals
 from signalglass.ui._data import frame, html, value
 from signalglass.ui.shell import render_page_title
 
@@ -22,6 +23,9 @@ class SignalsLabConfig:
     coverage_days: int
     model: str
     run_requested: bool = False
+    transaction_cost_bps: float = 5.0
+    signal_threshold: float = 0.0
+    allow_short: bool = False
 
     def matches(self, other: SignalsLabConfig) -> bool:
         """Compare evaluation inputs while ignoring transient button state."""
@@ -30,11 +34,19 @@ class SignalsLabConfig:
             self.ticker == other.ticker
             and self.coverage_days == other.coverage_days
             and self.model == other.model
+            and self.transaction_cost_bps == other.transaction_cost_bps
+            and self.signal_threshold == other.signal_threshold
+            and self.allow_short == other.allow_short
         )
 
 
 _COVERAGE_OPTIONS = {"90 trading days": 90, "60 trading days": 60, "30 trading days": 30}
-_MODEL_OPTIONS = {"Directional baseline": "directional_baseline"}
+_MODEL_OPTIONS = {
+    "Model comparison (auto)": "auto",
+    "Linear regression": "linear",
+    "Ridge regression": "ridge",
+    "Random forest": "random_forest",
+}
 
 
 def _percent(raw: Any) -> float:
@@ -156,7 +168,6 @@ def render_signals_lab(
                 list(_MODEL_OPTIONS),
                 label_visibility="collapsed",
                 key="sg_lab_model",
-                disabled=True,
             )
     with actions:
         run_col, method_col = st.columns(2)
@@ -164,14 +175,30 @@ def render_signals_lab(
             run_requested = st.button("Run evaluation", type="primary", width="stretch")
         with method_col:
             st.button(
-                "Methodology", width="stretch", help="Expanding-window linear regression with no look-ahead."
+                "Methodology", width="stretch", help="Expanding-window model comparison with no look-ahead."
             )
+    assumption_one, assumption_two, assumption_three = st.columns(3)
+    with assumption_one:
+        transaction_cost_bps = float(
+            st.number_input("Transaction cost (bps)", min_value=0.0, max_value=100.0, value=5.0, step=1.0)
+        )
+    with assumption_two:
+        signal_threshold = float(
+            st.number_input(
+                "Signal threshold", min_value=0.0, max_value=0.10, value=0.0, step=0.001, format="%.3f"
+            )
+        )
+    with assumption_three:
+        allow_short = bool(st.toggle("Allow short positions", value=False))
 
     request = SignalsLabConfig(
         ticker=str(selected_ticker),
         coverage_days=_COVERAGE_OPTIONS[str(coverage_label)],
         model=_MODEL_OPTIONS[str(model_label)],
         run_requested=run_requested,
+        transaction_cost_bps=transaction_cost_bps,
+        signal_threshold=signal_threshold,
+        allow_short=allow_short,
     )
     if completed_run is None or not completed_run.matches(request):
         st.info("Run an evaluation to see out-of-sample results.")
@@ -215,6 +242,48 @@ def render_signals_lab(
         st.caption(
             "Descriptive feature values from the selected market window. They are context, not model attribution."
         )
+
+    suite = value(derived, "model_suite", default=None)
+    leaderboard = frame(suite, "leaderboard")
+    if not leaderboard.empty:
+        with st.container(border=True):
+            st.markdown(
+                '<div class="sg-section-heading"><h2>Model comparison</h2><span class="sg-muted">Same walk-forward windows</span></div>',
+                unsafe_allow_html=True,
+            )
+            display = leaderboard.copy(deep=True)
+            display["model"] = display["model"].str.replace("_", " ").str.title()
+            st.dataframe(
+                display.style.format({"directional_accuracy": "{:.1%}", "mean_absolute_error": "{:.2%}"}),
+                hide_index=True,
+                width="stretch",
+            )
+
+    backtest = value(derived, "backtest", default=None)
+    timeline = frame(backtest, "timeline")
+    metrics = value(backtest, "metrics", default=None)
+    if metrics is not None and not timeline.empty:
+        st.markdown(
+            f'<div class="sg-section-heading"><h2>Cost-aware backtest</h2><span class="sg-muted">{completed_run.transaction_cost_bps:.0f} bps · {"long/short" if completed_run.allow_short else "long/cash"}</span></div><section class="sg-scorebar"><div class="sg-score"><div class="sg-score-value">{_percent(value(metrics, "total_return", default=0)):+.1f}%</div><div class="sg-score-label">Strategy return</div></div><div class="sg-score"><div class="sg-score-value">{_percent(value(metrics, "benchmark_return", default=0)):+.1f}%</div><div class="sg-score-label">Buy and hold</div></div><div class="sg-score"><div class="sg-score-value">{float(value(metrics, "sharpe_ratio", default=0)):.2f}</div><div class="sg-score-label">Sharpe ratio</div></div><div class="sg-score"><div class="sg-score-value">{_percent(value(metrics, "max_drawdown", default=0)):.1f}%</div><div class="sg-score-label">Max drawdown</div></div><div class="sg-score"><div class="sg-score-value">{int(value(metrics, "trade_count", default=0))}</div><div class="sg-score-label">Position changes</div></div></section>',
+            unsafe_allow_html=True,
+        )
+        st.plotly_chart(make_equity_curve_chart(timeline), width="stretch", config={"displayModeBar": False})
+
+    model_name = str(value(evaluation, "model_name", default=completed_run.model))
+    export_frame = build_execution_signal_frame(
+        predictions,
+        ticker=completed_run.ticker,
+        model_name=model_name,
+        threshold=completed_run.signal_threshold,
+    )
+    st.download_button(
+        "Download C++ signal JSON",
+        data=serialize_execution_signals(export_frame),
+        file_name=f"signalglass-{completed_run.ticker.lower()}-signals.json",
+        mime="application/json",
+        width="stretch",
+        help="Exports predictions only; realized returns are deliberately excluded.",
+    )
     _render_methodology()
     return request
 

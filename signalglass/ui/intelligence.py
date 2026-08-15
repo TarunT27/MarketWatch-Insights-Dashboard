@@ -56,8 +56,10 @@ def render_intelligence(bundle: Any, derived: Any = None) -> None:
             if isinstance(source, dict):
                 source = source.get("name", "SignalGlass")
             label = str(article.get("sentiment_label", "Neutral")).title()
+            evidence = str(article.get("sentiment_evidence", "")).strip()
+            evidence_copy = f" · Evidence: {evidence}" if evidence else ""
             parts.append(
-                f'<article class="sg-list-row"><div><div class="sg-list-title">{html(article.get("title", "Market update"))}</div><div class="sg-list-subtitle">{html(source)} · {html(format_date(article.get("publishedAt")))}</div></div><span class="sg-muted">{html(str(article.get("description", ""))[:96])}</span><span class="sg-tag {"neutral" if label == "Neutral" else ""}">{html(label)}</span></article>'
+                f'<article class="sg-list-row"><div><div class="sg-list-title">{html(article.get("title", "Market update"))}</div><div class="sg-list-subtitle">{html(source)} · {html(format_date(article.get("publishedAt")))}</div></div><span class="sg-muted">{html(str(article.get("description", ""))[:96] + evidence_copy)}</span><span class="sg-tag {"neutral" if label == "Neutral" else ""}">{html(label)}</span></article>'
             )
         st.markdown("".join(parts), unsafe_allow_html=True)
 

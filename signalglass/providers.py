@@ -11,6 +11,7 @@ import yfinance as yf
 
 from .demo_data import NEWS_COLUMNS, PRICE_COLUMNS, generate_demo_news, generate_demo_prices
 from .models import MarketBundle
+from .sentiment import score_financial_text
 from .validation import normalize_date_range, validate_ticker
 
 try:
@@ -154,11 +155,7 @@ def _fetch_live_news(ticker: str, start_date: date, end_date: date, api_key: str
             continue
         title = str(article.get("title") or "")
         description = str(article.get("description") or "")
-        lowered = f"{title} {description}".lower()
-        positive_hits = sum(word in lowered for word in ("growth", "gain", "beat", "strong", "record"))
-        negative_hits = sum(word in lowered for word in ("loss", "fall", "miss", "risk", "weak"))
-        score = float(max(-1.0, min(1.0, (positive_hits - negative_hits) * 0.2)))
-        label = "Positive" if score > 0.05 else "Negative" if score < -0.05 else "Neutral"
+        sentiment = score_financial_text(title, description)
         records.append(
             {
                 "title": title,
@@ -167,8 +164,9 @@ def _fetch_live_news(ticker: str, start_date: date, end_date: date, api_key: str
                 "publishedAt": published_at.tz_convert("America/New_York").tz_localize(None),
                 "source": (article.get("source") or {}).get("name") or "NewsAPI",
                 "ticker": ticker,
-                "sentiment_label": label,
-                "sentiment_score": score,
+                "sentiment_label": sentiment.label,
+                "sentiment_score": sentiment.score,
+                "sentiment_evidence": ", ".join(sentiment.evidence),
                 "_order": index,
             }
         )
