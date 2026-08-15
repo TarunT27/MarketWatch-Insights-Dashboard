@@ -234,6 +234,62 @@ def make_signal_evaluation_chart(
     return figure
 
 
+def make_equity_curve_chart(
+    backtest: pd.DataFrame | Iterable[Mapping[str, Any]] | None,
+    *,
+    height: int = 330,
+) -> go.Figure:
+    """Compare cumulative strategy and buy-and-hold performance."""
+
+    frame = _frame(backtest)
+    date_col = _first_column(frame, ("date", "timestamp", "datetime"))
+    strategy_col = _first_column(frame, ("strategy_equity", "strategy", "equity"))
+    benchmark_col = _first_column(frame, ("benchmark_equity", "benchmark", "buy_and_hold"))
+    if frame.empty or date_col is None or strategy_col is None or benchmark_col is None:
+        return _empty_figure("Run a backtest to compare strategy performance.", height=height)
+
+    dates = pd.to_datetime(frame[date_col], errors="coerce")
+    strategy = pd.to_numeric(frame[strategy_col], errors="coerce")
+    benchmark = pd.to_numeric(frame[benchmark_col], errors="coerce")
+    valid = dates.notna() & strategy.notna() & benchmark.notna()
+    if not valid.any():
+        return _empty_figure("Run a backtest to compare strategy performance.", height=height)
+
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=dates.loc[valid],
+            y=(strategy.loc[valid] - 1.0) * 100,
+            name="Strategy",
+            mode="lines",
+            line={"color": TOKENS.cobalt, "width": 2.5},
+            hovertemplate="%{y:+.2f}%<extra>Strategy</extra>",
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=dates.loc[valid],
+            y=(benchmark.loc[valid] - 1.0) * 100,
+            name="Buy and hold",
+            mode="lines",
+            line={"color": TOKENS.text_muted, "width": 1.8, "dash": "dot"},
+            hovertemplate="%{y:+.2f}%<extra>Buy and hold</extra>",
+        )
+    )
+    figure.update_layout(**plotly_layout_defaults(height=height))
+    figure.update_layout(
+        margin={"l": 44, "r": 24, "t": 32, "b": 34},
+        legend={"orientation": "h", "y": 1.08, "x": 0},
+    )
+    figure.update_xaxes(showgrid=False, tickfont={"color": TOKENS.text_muted})
+    figure.update_yaxes(
+        gridcolor="rgba(139,161,184,.10)",
+        zerolinecolor=TOKENS.border,
+        ticksuffix="%",
+    )
+    return figure
+
+
 def make_compare_chart(
     series: Mapping[str, pd.DataFrame] | pd.DataFrame | None,
     *,
@@ -296,6 +352,7 @@ compare_chart = make_compare_chart
 __all__ = [
     "compare_chart",
     "make_compare_chart",
+    "make_equity_curve_chart",
     "make_overview_chart",
     "make_signal_evaluation_chart",
     "overview_chart",

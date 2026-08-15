@@ -80,6 +80,7 @@ def test_app_renders_signalglass_navigation_and_trust_copy(keyless_app: AppTest)
         "Overview",
         "Compare",
         "Intelligence",
+        "Portfolio",
         "Signals Lab",
         "Demo data",
         "Why it moved",
@@ -160,6 +161,7 @@ def test_navigation_renders_compare_intelligence_and_signals_lab_user_journeys(k
     journeys = {
         "Compare": ("Relative performance", "Snapshot"),
         "Intelligence": ("Market narrative", "Evidence stream"),
+        "Portfolio": ("Portfolio risk", "Save research workspace"),
         "Signals Lab": ("Run an evaluation to see out-of-sample results.", "Limitations"),
     }
     app = keyless_app

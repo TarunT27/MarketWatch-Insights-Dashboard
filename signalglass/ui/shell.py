@@ -9,7 +9,7 @@ import streamlit as st
 
 from signalglass.theme import apply_theme
 
-PAGES = ("Overview", "Compare", "Intelligence", "Signals Lab")
+PAGES = ("Overview", "Compare", "Intelligence", "Portfolio", "Signals Lab")
 
 
 def _wave_mark() -> str:

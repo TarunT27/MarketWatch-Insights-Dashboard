@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sqlite3
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 import streamlit as st
 
 from signalglass.analytics import (
-    evaluate_directional_signal,
+    evaluate_model_suite,
     merge_market_and_sentiment,
     prepare_sentiment_summary,
 )
+from signalglass.backtesting import BacktestConfig, run_backtest
+from signalglass.portfolio import analyze_portfolio
 from signalglass.providers import fetch_market_bundle, load_demo_bundle
+from signalglass.store import LocalResearchStore
 from signalglass.symbols import (
     DEFAULT_SYMBOL,
     FEATURED_SYMBOLS,
@@ -28,6 +33,7 @@ from signalglass.ui import (
     render_footer,
     render_intelligence,
     render_overview,
+    render_portfolio,
     render_signals_lab,
 )
 
@@ -166,11 +172,28 @@ else:
 
 newsapi_key = optional_secret("newsapi_key")
 bundle = load_bundle(symbol, mode, newsapi_key)
+portfolio_store = None
+saved_watchlist: tuple[str, ...] = ()
+saved_allocations: dict[str, float] = {}
+if page == "Portfolio":
+    try:
+        store_path = Path(os.getenv("SIGNALGLASS_DB_PATH", ".signalglass/signalglass.db"))
+        portfolio_store = LocalResearchStore(store_path)
+        saved_watchlist = portfolio_store.load_watchlist()
+        saved_allocations = portfolio_store.load_allocations()
+    except (OSError, ValueError, sqlite3.Error) as error:
+        st.warning(f"Local research persistence is unavailable ({type(error).__name__}).")
+
 comparison_bundles = {symbol: bundle}
-if page in {"Overview", "Compare"}:
+if page in {"Overview", "Compare", "Portfolio"}:
+    recent_for_page = (
+        (*saved_watchlist, *st.session_state.get("sg_recent_symbols", ()))
+        if page == "Portfolio"
+        else st.session_state.get("sg_recent_symbols", ())
+    )
     comparison_symbols = build_symbol_choices(
         symbol,
-        st.session_state.get("sg_recent_symbols", ()),
+        recent_for_page,
         featured=FEATURED_SYMBOLS,
         limit=4,
     )
@@ -178,6 +201,19 @@ if page in {"Overview", "Compare"}:
         ticker: bundle if ticker == symbol else load_bundle(ticker, mode, "") for ticker in comparison_symbols
     }
 derived = derived_view(bundle, comparison_bundles)
+if page == "Portfolio":
+    available_allocations = {
+        ticker: weight for ticker, weight in saved_allocations.items() if ticker in comparison_bundles
+    }
+    if not available_allocations:
+        available_allocations = {ticker: 1.0 / len(comparison_bundles) for ticker in comparison_bundles}
+    try:
+        derived["portfolio_analysis"] = analyze_portfolio(
+            {ticker: item.prices for ticker, item in comparison_bundles.items()},
+            available_allocations,
+        )
+    except ValueError as error:
+        st.warning(f"Portfolio analysis is unavailable: {error}")
 comparison_is_mixed = mode == "Live" and any(item.is_demo for item in comparison_bundles.values())
 if mode == "Demo":
     data_label = "Demo data"
@@ -210,16 +246,48 @@ if page == "Signals Lab":
     lab_derived = dict(derived)
     if isinstance(saved_run, dict):
         lab_derived["evaluation"] = saved_run.get("evaluation")
+        lab_derived["model_suite"] = saved_run.get("model_suite")
+        lab_derived["backtest"] = saved_run.get("backtest")
     request = render_signals_lab(bundle, lab_derived, completed_run=completed_config)
     if request.run_requested:
         selected_market = derived["market"].tail(request.coverage_days).copy(deep=True)
         min_train_size = min(20, max(10, len(selected_market) // 3))
-        evaluation = evaluate_directional_signal(selected_market, min_train_size=min_train_size)
+        model_suite = evaluate_model_suite(selected_market, min_train_size=min_train_size)
+        if model_suite is None:
+            evaluation = None
+            backtest = None
+        else:
+            evaluation = (
+                model_suite.best_evaluation
+                if request.model == "auto"
+                else next(item for item in model_suite.evaluations if item.model_name == request.model)
+            )
+            backtest = run_backtest(
+                evaluation.predictions,
+                config=BacktestConfig(
+                    transaction_cost_bps=request.transaction_cost_bps,
+                    signal_threshold=request.signal_threshold,
+                    allow_short=request.allow_short,
+                ),
+            )
         st.session_state["sg_completed_signal_run"] = {
             "config": request,
             "evaluation": evaluation,
+            "model_suite": model_suite,
+            "backtest": backtest,
             "data_fingerprint": data_fingerprint,
         }
+        st.rerun()
+elif page == "Portfolio":
+    request = render_portfolio(
+        bundle,
+        derived,
+        saved_watchlist=saved_watchlist,
+        saved_allocations=saved_allocations,
+    )
+    if request.save_requested and request.allocations and portfolio_store is not None:
+        portfolio_store.replace_watchlist(request.watchlist)
+        portfolio_store.replace_allocations(request.allocations)
         st.rerun()
 else:
     renderers = {

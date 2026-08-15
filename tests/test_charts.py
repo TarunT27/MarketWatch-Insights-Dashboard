@@ -10,6 +10,7 @@ import pytest
 
 from signalglass.charts import (
     make_compare_chart,
+    make_equity_curve_chart,
     make_overview_chart,
     make_signal_evaluation_chart,
 )
@@ -21,6 +22,7 @@ from signalglass.charts import (
         (make_overview_chart, "Price history is unavailable for this range."),
         (make_signal_evaluation_chart, "Run an evaluation to inspect the signal."),
         (make_compare_chart, "Choose at least one company to compare."),
+        (make_equity_curve_chart, "Run a backtest to compare strategy performance."),
     ],
 )
 def test_chart_builders_return_readable_empty_states(
@@ -34,6 +36,23 @@ def test_chart_builders_return_readable_empty_states(
     assert figure.layout.annotations[0].text == expected_message
     assert figure.layout.xaxis.visible is False
     assert figure.layout.yaxis.visible is False
+
+
+def test_equity_curve_chart_compares_strategy_and_benchmark_without_mutation() -> None:
+    timeline = pd.DataFrame(
+        {
+            "date": pd.bdate_range("2026-01-05", periods=3),
+            "strategy_equity": [1.0, 1.02, 1.01],
+            "benchmark_equity": [1.0, 0.99, 1.015],
+        }
+    )
+    original = timeline.copy(deep=True)
+
+    figure = make_equity_curve_chart(timeline)
+
+    pd.testing.assert_frame_equal(timeline, original)
+    assert [trace.name for trace in figure.data] == ["Strategy", "Buy and hold"]
+    assert list(figure.data[0].y) == pytest.approx([0.0, 2.0, 1.0])
 
 
 def test_overview_chart_combines_price_volume_sentiment_and_valid_events(price_frame_factory) -> None:

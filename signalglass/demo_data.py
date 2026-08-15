@@ -19,6 +19,7 @@ NEWS_COLUMNS = [
     "ticker",
     "sentiment_label",
     "sentiment_score",
+    "sentiment_evidence",
 ]
 DEFAULT_DEMO_END = date(2026, 7, 17)
 
@@ -125,6 +126,7 @@ def generate_demo_news(
                 "ticker": ticker,
                 "sentiment_label": label,
                 "sentiment_score": float(score),
+                "sentiment_evidence": headline,
             }
         )
 

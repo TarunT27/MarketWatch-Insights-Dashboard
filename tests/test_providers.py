@@ -173,6 +173,7 @@ def test_fetch_market_bundle_returns_normalized_live_prices_and_news(
     assert bundle.news["source"].tolist() == ["Example Wire"]
     assert bundle.news["sentiment_label"].tolist() == ["Positive"]
     assert bundle.news["sentiment_score"].iloc[0] > 0
+    assert "beat estimates" in bundle.news["sentiment_evidence"].iloc[0]
 
 
 def test_live_utc_headline_uses_new_york_time_for_session_alignment(

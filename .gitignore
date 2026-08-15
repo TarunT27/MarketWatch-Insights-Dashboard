@@ -8,3 +8,6 @@ htmlcov/
 .streamlit/secrets.toml
 .env
 .DS_Store
+.signalglass/
+.audit-cache/
+.test_tmp/

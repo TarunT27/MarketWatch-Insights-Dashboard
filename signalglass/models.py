@@ -34,6 +34,7 @@ class SignalEvaluation:
     directional_accuracy: float
     sample_size: int
     latest_predicted_return: float | None = None
+    model_name: str = "linear"
 
     @property
     def predicted_direction(self) -> str | None:
@@ -44,4 +45,17 @@ class SignalEvaluation:
         return "Up" if self.latest_predicted_return >= 0 else "Down"
 
 
-__all__ = ["MarketBundle", "SignalEvaluation"]
+@dataclass(frozen=True, slots=True)
+class ModelSuite:
+    """Comparable walk-forward evaluations ranked by out-of-sample evidence."""
+
+    evaluations: tuple[SignalEvaluation, ...]
+    leaderboard: pd.DataFrame
+    best_model: str
+
+    @property
+    def best_evaluation(self) -> SignalEvaluation:
+        return next(item for item in self.evaluations if item.model_name == self.best_model)
+
+
+__all__ = ["MarketBundle", "ModelSuite", "SignalEvaluation"]

@@ -6,11 +6,12 @@ from datetime import date, time, timedelta
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from .models import SignalEvaluation
+from .models import ModelSuite, SignalEvaluation
 
 SENTIMENT_COLUMNS = [
     "date",
@@ -197,10 +198,27 @@ def _build_signal_dataset(market_frame: pd.DataFrame) -> tuple[pd.DataFrame, np.
     return pair_data, features, targets
 
 
+def _model_pipeline(model_name: str):
+    if model_name == "linear":
+        return Pipeline([("scale", StandardScaler()), ("regression", LinearRegression())])
+    if model_name == "ridge":
+        return Pipeline([("scale", StandardScaler()), ("regression", Ridge(alpha=1.0))])
+    if model_name == "random_forest":
+        return RandomForestRegressor(
+            n_estimators=32,
+            max_depth=4,
+            min_samples_leaf=2,
+            random_state=42,
+            n_jobs=1,
+        )
+    raise ValueError(f"unsupported model: {model_name}")
+
+
 def evaluate_directional_signal(
     market_frame: pd.DataFrame,
     *,
     min_train_size: int = 20,
+    model_name: str = "linear",
 ) -> SignalEvaluation | None:
     """Evaluate next-session returns using expanding-window, out-of-sample fits."""
 
@@ -217,12 +235,7 @@ def evaluate_directional_signal(
 
     records: list[dict[str, object]] = []
     for test_position in range(min_train_size, len(paired)):
-        model = Pipeline(
-            [
-                ("scale", StandardScaler()),
-                ("regression", LinearRegression()),
-            ]
-        )
+        model = _model_pipeline(model_name)
         model.fit(features[:test_position], targets[:test_position])
         predicted_return = float(model.predict(features[test_position : test_position + 1])[0])
         records.append(
@@ -247,12 +260,64 @@ def evaluate_directional_signal(
         directional_accuracy=float(direction_matches.mean()),
         sample_size=len(predictions),
         latest_predicted_return=float(predictions["predicted_return"].iloc[-1]),
+        model_name=model_name,
+    )
+
+
+def evaluate_model_suite(
+    market_frame: pd.DataFrame,
+    *,
+    min_train_size: int = 20,
+    model_names: tuple[str, ...] = ("linear", "ridge", "random_forest"),
+) -> ModelSuite | None:
+    """Rank multiple models using identical chronological out-of-sample windows."""
+
+    if not model_names:
+        raise ValueError("model suite must contain at least one model")
+    evaluations = tuple(
+        evaluation
+        for name in model_names
+        if (
+            evaluation := evaluate_directional_signal(
+                market_frame,
+                min_train_size=min_train_size,
+                model_name=name,
+            )
+        )
+        is not None
+    )
+    if not evaluations:
+        return None
+    leaderboard = (
+        pd.DataFrame(
+            [
+                {
+                    "model": item.model_name,
+                    "directional_accuracy": item.directional_accuracy,
+                    "mean_absolute_error": item.mean_absolute_error,
+                    "sample_size": item.sample_size,
+                }
+                for item in evaluations
+            ]
+        )
+        .sort_values(
+            ["directional_accuracy", "mean_absolute_error", "model"],
+            ascending=[False, True, True],
+            kind="stable",
+        )
+        .reset_index(drop=True)
+    )
+    return ModelSuite(
+        evaluations=evaluations,
+        leaderboard=leaderboard,
+        best_model=str(leaderboard.loc[0, "model"]),
     )
 
 
 __all__ = [
     "SENTIMENT_COLUMNS",
     "evaluate_directional_signal",
+    "evaluate_model_suite",
     "merge_market_and_sentiment",
     "prepare_sentiment_summary",
 ]
