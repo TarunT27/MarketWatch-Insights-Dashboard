@@ -9,7 +9,13 @@ from typing import Any
 import pandas as pd
 import yfinance as yf
 
-from .demo_data import NEWS_COLUMNS, PRICE_COLUMNS, generate_demo_news, generate_demo_prices
+from .demo_data import (
+    NEWS_COLUMNS,
+    PRICE_COLUMNS,
+    demo_company_name,
+    generate_demo_news,
+    generate_demo_prices,
+)
 from .models import MarketBundle
 from .sentiment import score_financial_text
 from .validation import normalize_date_range, validate_ticker
@@ -100,6 +106,28 @@ def normalize_price_frame(raw_frame: pd.DataFrame, ticker: object) -> pd.DataFra
     return normalized.loc[:, PRICE_COLUMNS].reset_index(drop=True)
 
 
+@lru_cache(maxsize=256)
+def resolve_company_name(ticker: str) -> str:
+    """Look up a display name for any symbol, degrading to the ticker itself.
+
+    The lookup is cached for the process lifetime and never raises: a company
+    label is cosmetic, so a slow or unavailable provider must not break a render.
+    """
+
+    demo_name = demo_company_name(ticker)
+    if demo_name:
+        return demo_name
+    try:
+        info = yf.Ticker(ticker).get_info()
+        for field in ("shortName", "longName", "displayName"):
+            candidate = str(info.get(field) or "").strip()
+            if candidate:
+                return candidate
+    except Exception:
+        return ticker
+    return ticker
+
+
 @lru_cache(maxsize=64)
 def _cached_demo_bundle(ticker: str, days: int, end_date: date) -> MarketBundle:
     return MarketBundle(
@@ -111,6 +139,7 @@ def _cached_demo_bundle(ticker: str, days: int, end_date: date) -> MarketBundle:
         notice="Demo data is synthetic and designed for product exploration.",
         price_source="SignalGlass deterministic demo prices",
         news_source="SignalGlass deterministic demo news",
+        company=demo_company_name(ticker) or ticker,
     )
 
 
@@ -134,6 +163,7 @@ def load_demo_bundle(
         notice=cached.notice,
         price_source=cached.price_source,
         news_source=cached.news_source,
+        company=cached.company,
     )
 
 
@@ -229,6 +259,7 @@ def fetch_market_bundle(
             notice=f"Live providers were unavailable ({type(error).__name__}); showing deterministic demo data.",
             price_source=fallback.price_source,
             news_source=fallback.news_source,
+            company=fallback.company,
         )
 
     if normalized_news_key:
@@ -265,6 +296,7 @@ def fetch_market_bundle(
         notice=notice,
         price_source="Yahoo Finance live prices",
         news_source=news_source,
+        company=resolve_company_name(symbol),
     )
 
 
@@ -272,5 +304,6 @@ __all__ = [
     "fetch_market_bundle",
     "load_demo_bundle",
     "normalize_price_frame",
+    "resolve_company_name",
     "yf",
 ]

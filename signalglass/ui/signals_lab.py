@@ -49,6 +49,43 @@ _MODEL_OPTIONS = {
 }
 
 
+_VERDICT_CLASSES = {
+    "Significant": "sg-positive",
+    "Not significant": "sg-neutral-metric",
+    "Below baseline": "sg-negative",
+}
+
+
+def _render_verdict_note(
+    verdict: str,
+    accuracy: float,
+    baseline: float,
+    low: float,
+    high: float,
+    samples: int,
+) -> None:
+    """State plainly what the headline accuracy does and does not establish."""
+
+    if verdict == "Below baseline":
+        st.warning(
+            f"This model is **worse than the naive baseline**. Always predicting the more common "
+            f"direction would have scored {baseline:.1f}% against this model's {accuracy:.1f}%. "
+            f"Treat the signal as unproven."
+        )
+    elif verdict == "Not significant":
+        st.info(
+            f"Accuracy of {accuracy:.1f}% over {samples} sessions has a 95% confidence interval of "
+            f"{low:.1f}–{high:.1f}%, which includes 50%. This result is **statistically "
+            f"indistinguishable from a coin flip** — it is not yet evidence of an edge."
+        )
+    else:
+        st.success(
+            f"The 95% confidence interval ({low:.1f}–{high:.1f}%) excludes 50% and the model clears "
+            f"the {baseline:.1f}% baseline, so this edge is statistically meaningful over "
+            f"{samples} sessions. It remains a backtest, not a forecast."
+        )
+
+
 def _percent(raw: Any) -> float:
     try:
         number = float(raw)
@@ -131,13 +168,13 @@ def _render_methodology() -> None:
             """<div class="sg-section-heading"><h2>How it works</h2></div><div class="sg-process">
             <div class="sg-process-step"><div class="sg-process-number">01</div><div><div class="sg-process-title">Market data + News</div><div class="sg-process-copy">Prices, volume, and news signals collected daily.</div></div></div>
             <div class="sg-process-step"><div class="sg-process-number">02</div><div><div class="sg-process-title">Features</div><div class="sg-process-copy">Raw data transformed into model features.</div></div></div>
-            <div class="sg-process-step"><div class="sg-process-number">03</div><div><div class="sg-process-title">Time split</div><div class="sg-process-copy">Chronological train, validate, and test windows.</div></div></div>
+            <div class="sg-process-step"><div class="sg-process-number">03</div><div><div class="sg-process-title">Time split</div><div class="sg-process-copy">Expanding train window; the next unseen session is the test.</div></div></div>
             <div class="sg-process-step"><div class="sg-process-number">04</div><div><div class="sg-process-title">Evaluation</div><div class="sg-process-copy">Walk-forward test measures out-of-sample performance.</div></div></div></div>""",
             unsafe_allow_html=True,
         )
     with limit_col, st.container(border=True):
         st.markdown(
-            '<div class="sg-section-heading"><h2>Limitations</h2></div><p>Experimental research signal.<br>Evaluated chronologically with no look-ahead.</p><p>Not financial advice.</p>',
+            '<div class="sg-section-heading"><h2>Limitations</h2></div><p>Experimental research signal.<br>Evaluated chronologically with no look-ahead.</p><p>Accuracy over a few dozen sessions carries a wide confidence interval, and the winning model is chosen on the same windows it is scored on.</p><p>Not financial advice.</p>',
             unsafe_allow_html=True,
         )
 
@@ -216,10 +253,34 @@ def render_signals_lab(
     baseline = calculate_directional_baseline(predictions) * 100
     mae = _percent(value(evaluation, "mean_absolute_error", "mae", default=0))
     samples = int(value(evaluation, "sample_size", "samples", default=len(predictions)) or 0)
+    low = _percent(value(evaluation, "accuracy_low", default=0.0))
+    high = _percent(value(evaluation, "accuracy_high", default=1.0))
+    verdict = str(value(evaluation, "verdict", default="Not significant"))
+    # The headline number is only green when it actually clears the naive
+    # baseline; a model losing to "always guess up" must not read as a win.
+    accuracy_class = _VERDICT_CLASSES.get(verdict, "sg-neutral-metric")
     st.markdown(
-        f'<section class="sg-scorebar" aria-label="Evaluation metrics"><div class="sg-score"><div class="sg-score-value">{accuracy:.1f}%</div><div class="sg-score-label">directional accuracy</div></div><div class="sg-score"><div class="sg-score-label">Majority-direction baseline</div><div class="sg-score-value">{baseline:.1f}%</div></div><div class="sg-score"><div class="sg-score-label">MAE</div><div class="sg-score-value">{mae:.2f}%</div></div><div class="sg-score"><div class="sg-score-label">Test samples</div><div class="sg-score-value">{samples}</div></div><div class="sg-score"><div class="sg-score-label">Coverage</div><div class="sg-score-value">{completed_run.coverage_days} days</div></div></section>',
+        f'<section class="sg-scorebar" aria-label="Evaluation metrics">'
+        f'<div class="sg-score"><div class="sg-score-value sg-score-headline {accuracy_class}">{accuracy:.1f}%</div>'
+        f'<div class="sg-score-label">directional accuracy · 95% CI {low:.1f}–{high:.1f}%</div></div>'
+        f'<div class="sg-score"><div class="sg-score-label">Majority-direction baseline</div>'
+        f'<div class="sg-score-value">{baseline:.1f}%</div></div>'
+        f'<div class="sg-score"><div class="sg-score-label">Verdict</div>'
+        f'<div class="sg-score-value sg-score-verdict {accuracy_class}">{html(verdict)}</div></div>'
+        f'<div class="sg-score"><div class="sg-score-label">MAE</div><div class="sg-score-value">{mae:.2f}%</div></div>'
+        f'<div class="sg-score"><div class="sg-score-label">Test samples · {completed_run.coverage_days} days</div>'
+        f'<div class="sg-score-value">{samples}</div></div></section>',
         unsafe_allow_html=True,
     )
+    _render_verdict_note(verdict, accuracy, baseline, low, high, samples)
+    suite = value(derived, "model_suite", default=None)
+    if suite is not None and not bool(value(suite, "selection_is_separable", default=True)):
+        st.info(
+            "Model leaderboard: the top models' confidence intervals overlap, so the ranking "
+            "reflects sampling noise rather than a demonstrated difference in skill. The winner "
+            "is also selected on the same windows it is scored on, which biases its reported "
+            "accuracy upward."
+        )
 
     chart_col, feature_col = st.columns([2.05, 1], gap="small")
     with chart_col, st.container(border=True):

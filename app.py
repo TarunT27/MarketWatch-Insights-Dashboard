@@ -18,6 +18,7 @@ from signalglass.analytics import (
 from signalglass.backtesting import BacktestConfig, run_backtest
 from signalglass.portfolio import analyze_portfolio
 from signalglass.providers import fetch_market_bundle, load_demo_bundle
+from signalglass.quality import assess_data_quality
 from signalglass.store import LocalResearchStore
 from signalglass.symbols import (
     DEFAULT_SYMBOL,
@@ -36,6 +37,7 @@ from signalglass.ui import (
     render_portfolio,
     render_signals_lab,
 )
+from signalglass.windows import DEFAULT_RANGE, RANGE_LABELS, resolve_range
 
 APP_ICON = "assets/brand/signalglass-app-icon.png"
 
@@ -56,13 +58,15 @@ def optional_secret(name: str) -> str:
 
 
 @st.cache_data(ttl=900, max_entries=128, show_spinner=False)
-def load_bundle(symbol: str, mode: str, api_key: str):
-    if mode == "Demo":
-        return load_demo_bundle(symbol, days=90)
+def load_bundle(symbol: str, mode: str, api_key: str, range_label: str = DEFAULT_RANGE):
+    window = resolve_range(range_label)
     end = date.today()
+    if mode == "Demo":
+        # Demo history ends today so the tour never looks stale next to the clock.
+        return load_demo_bundle(symbol, days=window.trading_days, end_date=end)
     return fetch_market_bundle(
         symbol,
-        end - timedelta(days=135),
+        end - timedelta(days=window.calendar_days),
         end,
         newsapi_key=api_key,
         prefer_live_prices=True,
@@ -99,7 +103,11 @@ def derived_view(bundle, comparison_bundles: dict[str, object]) -> dict[str, obj
         }
         for ticker, frame in comparisons.items()
     ]
+    quality = assess_data_quality(bundle.prices, bundle.news)
     return {
+        "company": bundle.company or bundle.ticker,
+        "data_quality": quality.score,
+        "data_quality_summary": quality.summary,
         "market": market,
         "comparison": comparisons,
         "comparison_sources": comparison_sources,
@@ -132,7 +140,7 @@ if requested_symbol:
 recent_symbols = tuple(st.session_state.get("sg_recent_symbols", FEATURED_SYMBOLS[:4]))
 symbol_choices = build_symbol_choices(last_valid_symbol, recent_symbols)
 
-control_left, control_right = st.columns([1, 1], vertical_alignment="center")
+control_left, control_mid, control_right = st.columns([1.25, 0.85, 0.7], vertical_alignment="center")
 with control_left:
     symbol_candidate = st.selectbox(
         "Search symbol",
@@ -142,6 +150,18 @@ with control_left:
         accept_new_options=True,
         placeholder="Search any ticker — AMD, SPY, BRK.B, BTC-USD",
         help="Enter any Yahoo Finance-compatible stock, ETF, index, or crypto symbol.",
+    )
+with control_mid:
+    range_label = (
+        st.segmented_control(
+            "History range",
+            RANGE_LABELS,
+            default=DEFAULT_RANGE,
+            key="sg_range",
+            label_visibility="collapsed",
+            help="How much price history to load and evaluate.",
+        )
+        or DEFAULT_RANGE
     )
 with control_right:
     mode = st.segmented_control(
@@ -171,7 +191,7 @@ else:
         st.rerun()
 
 newsapi_key = optional_secret("newsapi_key")
-bundle = load_bundle(symbol, mode, newsapi_key)
+bundle = load_bundle(symbol, mode, newsapi_key, range_label)
 portfolio_store = None
 saved_watchlist: tuple[str, ...] = ()
 saved_allocations: dict[str, float] = {}
@@ -198,7 +218,8 @@ if page in {"Overview", "Compare", "Portfolio"}:
         limit=4,
     )
     comparison_bundles = {
-        ticker: bundle if ticker == symbol else load_bundle(ticker, mode, "") for ticker in comparison_symbols
+        ticker: bundle if ticker == symbol else load_bundle(ticker, mode, "", range_label)
+        for ticker in comparison_symbols
     }
 derived = derived_view(bundle, comparison_bundles)
 if page == "Portfolio":

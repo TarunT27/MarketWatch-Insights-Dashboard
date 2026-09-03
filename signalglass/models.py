@@ -23,6 +23,7 @@ class MarketBundle:
     notice: str | None = None
     price_source: str = "SignalGlass deterministic demo"
     news_source: str = "SignalGlass deterministic demo"
+    company: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +36,9 @@ class SignalEvaluation:
     sample_size: int
     latest_predicted_return: float | None = None
     model_name: str = "linear"
+    accuracy_low: float = 0.0
+    accuracy_high: float = 1.0
+    majority_baseline: float = 0.5
 
     @property
     def predicted_direction(self) -> str | None:
@@ -44,6 +48,28 @@ class SignalEvaluation:
             return None
         return "Up" if self.latest_predicted_return >= 0 else "Down"
 
+    @property
+    def beats_coin_flip(self) -> bool:
+        """True when the 95% interval excludes chance, so the edge is real."""
+
+        return self.accuracy_low > 0.5
+
+    @property
+    def beats_baseline(self) -> bool:
+        """True when the model outperforms always predicting the common direction."""
+
+        return self.directional_accuracy > self.majority_baseline
+
+    @property
+    def verdict(self) -> str:
+        """Plain-language reading of whether this result means anything."""
+
+        if not self.beats_baseline:
+            return "Below baseline"
+        if not self.beats_coin_flip:
+            return "Not significant"
+        return "Significant"
+
 
 @dataclass(frozen=True, slots=True)
 class ModelSuite:
@@ -52,6 +78,7 @@ class ModelSuite:
     evaluations: tuple[SignalEvaluation, ...]
     leaderboard: pd.DataFrame
     best_model: str
+    selection_is_separable: bool = True
 
     @property
     def best_evaluation(self) -> SignalEvaluation:

@@ -9,6 +9,8 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
+from .sentiment import score_financial_text
+
 PRICE_COLUMNS = ["date", "Open", "High", "Low", "Close", "Volume", "ticker"]
 NEWS_COLUMNS = [
     "title",
@@ -41,14 +43,56 @@ _PROFILES = {
     "TSLA": _TickerProfile("Tesla", 338.0, 0.00025, 0.025, 112_000_000, 404),
 }
 
+# Demo headlines are written in real finance language so the shipped sentiment
+# engine scores them for real. Nothing here carries a hardcoded label: the
+# labels, scores, and evidence in demo mode come from ``score_financial_text``,
+# which is the same code path live headlines take.
 _HEADLINES = (
-    ("product roadmap draws investor attention", 0.56, "Positive"),
-    ("analysts weigh demand signals ahead of earnings", 0.08, "Positive"),
-    ("shares steady as the market reviews fresh data", 0.00, "Neutral"),
-    ("supply concerns pressure the near-term outlook", -0.42, "Negative"),
-    ("leadership highlights durable cash-flow priorities", 0.48, "Positive"),
-    ("sector volatility keeps investors cautious", -0.18, "Negative"),
+    "tops quarterly estimates as demand strengthens",
+    "raises guidance after a record quarter",
+    "shares steady as the market reviews fresh data",
+    "misses expectations as growth slows",
+    "announces share repurchase program and dividend increase",
+    "faces regulatory scrutiny over platform practices",
+    "upgraded by analysts on margin expansion",
+    "warns of supply constraints and margin pressure",
+    "board schedules its annual shareholder meeting",
+    "rallies after better than expected results",
 )
+
+_DESCRIPTIONS = (
+    "Synthetic headline scored by the SignalGlass finance-domain sentiment engine.",
+    "Curated synthetic coverage for the SignalGlass offline product tour.",
+)
+
+
+# Display names known without a network call. Anything outside this map is
+# resolved live by the provider boundary and falls back to the ticker itself.
+_COMPANY_NAMES = {
+    "AAPL": "Apple Inc.",
+    "MSFT": "Microsoft Corp.",
+    "NVDA": "NVIDIA Corp.",
+    "TSLA": "Tesla, Inc.",
+    "AMZN": "Amazon.com, Inc.",
+    "GOOGL": "Alphabet Inc.",
+    "META": "Meta Platforms, Inc.",
+    "SPY": "SPDR S&P 500 ETF Trust",
+    "QQQ": "Invesco QQQ Trust",
+    "AMD": "Advanced Micro Devices, Inc.",
+    "NFLX": "Netflix, Inc.",
+    "BRK.B": "Berkshire Hathaway Inc.",
+    "^GSPC": "S&P 500 Index",
+    "^IXIC": "NASDAQ Composite",
+    "^DJI": "Dow Jones Industrial Average",
+    "BTC-USD": "Bitcoin USD",
+    "ETH-USD": "Ethereum USD",
+}
+
+
+def demo_company_name(ticker: str) -> str:
+    """Return a known display name, or an empty string when none is known."""
+
+    return _COMPANY_NAMES.get(str(ticker).strip().upper(), "")
 
 
 def _fallback_profile(ticker: str) -> _TickerProfile:
@@ -114,19 +158,24 @@ def generate_demo_news(
     records: list[dict[str, object]] = []
 
     for index, position in enumerate(positions):
-        headline, score, label = _HEADLINES[(index + profile.seed) % len(_HEADLINES)]
+        headline = _HEADLINES[(index + profile.seed) % len(_HEADLINES)]
+        description = _DESCRIPTIONS[index % len(_DESCRIPTIONS)]
+        title = f"{profile.company} {headline}"
         published_at = sessions[position] + pd.Timedelta(hours=9 + (index % 8))
+        # Score demo headlines through the production engine so the demo
+        # demonstrates the real scorer rather than a canned label.
+        sentiment = score_financial_text(title, description)
         records.append(
             {
-                "title": f"{profile.company} {headline}",
-                "description": "Curated synthetic headline for the SignalGlass offline product tour.",
+                "title": title,
+                "description": description,
                 "url": f"https://example.com/signalglass/{ticker.lower()}/{index + 1}",
                 "publishedAt": published_at,
                 "source": "SignalGlass Demo Wire",
                 "ticker": ticker,
-                "sentiment_label": label,
-                "sentiment_score": float(score),
-                "sentiment_evidence": headline,
+                "sentiment_label": sentiment.label,
+                "sentiment_score": sentiment.score,
+                "sentiment_evidence": ", ".join(sentiment.evidence),
             }
         )
 
@@ -137,6 +186,7 @@ __all__ = [
     "DEFAULT_DEMO_END",
     "NEWS_COLUMNS",
     "PRICE_COLUMNS",
+    "demo_company_name",
     "generate_demo_news",
     "generate_demo_prices",
 ]

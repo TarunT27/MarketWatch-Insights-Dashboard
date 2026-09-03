@@ -6,8 +6,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, is_dataclass
 from html import escape
 from typing import Any
+from urllib.parse import urlparse
 
 import pandas as pd
+
+from signalglass.demo_data import demo_company_name
 
 
 def value(source: Any, *names: str, default: Any = None) -> Any:
@@ -55,15 +58,41 @@ def html(value_to_escape: Any) -> str:
 
 
 def company_name(ticker: str) -> str:
-    return {
-        "AAPL": "Apple Inc.",
-        "MSFT": "Microsoft Corp.",
-        "NVDA": "NVIDIA Corp.",
-        "TSLA": "Tesla, Inc.",
-        "AMZN": "Amazon.com, Inc.",
-        "GOOGL": "Alphabet Inc.",
-        "META": "Meta Platforms, Inc.",
-    }.get(ticker.upper(), ticker.upper())
+    """Display name for a symbol, falling back to the ticker when unknown."""
+
+    return demo_company_name(ticker) or ticker.upper()
+
+
+def safe_url(raw: Any) -> str:
+    """Return an http(s) URL safe to place in an href, or an empty string.
+
+    Headline URLs arrive from an external news provider, so anything that is not
+    plainly http/https is dropped rather than rendered into the page.
+    """
+
+    candidate = str(raw or "").strip()
+    if not candidate:
+        return ""
+    try:
+        parsed = urlparse(candidate)
+    except ValueError:
+        return ""
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return candidate
+
+
+def link(label: Any, raw_url: Any, *, css_class: str = "sg-list-title") -> str:
+    """Render a headline as a real link when the source URL is usable."""
+
+    destination = safe_url(raw_url)
+    text = html(label)
+    if not destination:
+        return f'<div class="{css_class}">{text}</div>'
+    return (
+        f'<a class="{css_class} sg-headline-link" href="{html(destination)}" '
+        f'target="_blank" rel="noopener noreferrer nofollow">{text}</a>'
+    )
 
 
 def format_compact(number: float | int | None) -> str:

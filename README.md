@@ -16,16 +16,20 @@ The default experience is deterministic and works immediately. Switch to **Live*
 ## What makes it portfolio-ready
 
 - **Apple-inspired product UI** — true-neutral graphite surfaces, cobalt interaction states, restrained glass, responsive layouts, and a focused information hierarchy.
-- **Explainable evidence** — finance-domain phrases are scored with visible evidence instead of an unexplained sentiment label.
+- **Explainable evidence** — a 175-phrase finance lexicon scores every headline with negation handling and longest-phrase matching, and the exact matched phrases are printed under the headline. Demo and live headlines run through the same scorer, so the demo demonstrates the real engine.
+- **Statistically honest results** — directional accuracy is reported with a Wilson 95% confidence interval and compared against the majority-direction baseline. A model that loses to the naive baseline is labelled *Below baseline* in red, and a lead that sits inside the runner-up's interval is called out as selection noise.
 - **Five complete workspaces** — Overview, Compare, Intelligence, Portfolio, and Signals Lab are functional routes rather than decorative tabs.
-- **Any Yahoo-compatible symbol** — type a stock, ETF, index, or crypto ticker directly into the searchable picker; recent symbols stay one click away.
+- **Any Yahoo-compatible symbol** — type a stock, ETF, index, or crypto ticker directly into the searchable picker; recent symbols stay one click away, and company names resolve live for symbols outside the built-in map.
+- **A real time-range control** — 1M/3M/6M/1Y changes how much history is fetched and evaluated, not just how much of a fixed window is drawn.
+- **Measured data quality** — the headline percentage is computed from session coverage, field completeness, news coverage, and freshness, and the components are shown on hover.
 - **No-key live prices** — Yahoo Finance data is accessed through `yfinance`; no Yahoo API key is required.
-- **Honest model comparison** — linear regression, ridge regression, and random forest use identical expanding-window tests with no look-ahead.
+- **Honest model comparison** — linear regression, ridge regression, and random forest use identical expanding-window tests with no look-ahead, and the app states plainly when their results are indistinguishable.
 - **Cost-aware backtesting** — signals include configurable transaction costs, thresholds, and long/cash or long/short rules, with Sharpe ratio, drawdown, turnover, and a buy-and-hold benchmark.
 - **Portfolio risk** — a local SQLite workspace stores only watchlist symbols and allocations, then reports volatility, return, Sharpe ratio, drawdown, and asset risk contributions.
 - **Research-to-execution handoff** — prediction-only JSON follows a versioned schema designed for integration with the companion C++ trading simulator; realized returns are deliberately excluded.
 - **Resilient data provenance** — price and news sources are tracked independently, so a missing or failed news provider cannot silently mislabel the experience.
-- **Recruiter-friendly setup** — deterministic demo data, pinned dependencies, CI, linting, automated tests, and 80% coverage enforcement.
+- **Traceable sources** — every headline links to its origin, with untrusted URLs filtered to http(s) before they reach the page.
+- **Recruiter-friendly setup** — deterministic demo data, pinned dependencies, CI, linting, 133 automated tests, and 80% coverage enforcement.
 
 ## Product tour
 
@@ -120,6 +124,8 @@ signalglass/sentiment.py  Explainable finance-domain headline scoring
 signalglass/portfolio.py  Multi-asset return and risk analysis
 signalglass/store.py      Parameterized local SQLite preference storage
 signalglass/signal_export.py  Versioned prediction-only execution handoff
+signalglass/quality.py    Measured data-quality scoring for the loaded window
+signalglass/windows.py    Shared 1M/3M/6M/1Y range definitions
 signalglass/charts.py     Consistent Plotly chart builders
 signalglass/theme.py      Design tokens and responsive Streamlit styling
 signalglass/ui/           Feature-focused workspace renderers
@@ -138,7 +144,7 @@ python -m pytest --cov=signalglass --cov-report=term-missing --cov-fail-under=80
 python -m pip_audit -r requirements-lock.txt
 ```
 
-The current suite covers provider fallbacks, input validation, finance sentiment, session alignment, model comparison, transaction-cost accounting, portfolio risk, SQLite persistence, execution export, charts, and full app journeys. GitHub Actions runs lint, coverage, and dependency-audit checks for every push and pull request.
+The current suite covers provider fallbacks, input validation, finance sentiment on naturally worded headlines, session alignment, model comparison, confidence intervals and baseline verdicts, transaction-cost accounting, portfolio risk, SQLite persistence, execution export, outbound-link safety, responsive-shell invariants, charts, and full app journeys. GitHub Actions runs lint, coverage, and dependency-audit checks for every push and pull request.
 
 ## Research-to-execution contract
 
@@ -175,7 +181,8 @@ The repository includes the visual exploration used to guide the implementation:
 - Yahoo Finance access is provided through `yfinance` and is intended for personal, research, and educational use subject to the upstream terms.
 - Demo prices and headlines are synthetic and labeled in the product.
 - Headline sentiment uses an explainable finance phrase model, not a claim that an article or security is objectively positive or negative.
-- Every model uses expanding-window, out-of-sample evaluation; model selection is based on the same test windows.
+- Every model uses expanding-window, out-of-sample evaluation. Model selection uses the same test windows it reports, which biases the winner's accuracy upward; the app says so on screen rather than hiding it.
+- Directional accuracy over 60–90 sessions has a confidence interval roughly ±11 points wide. Treat any single-run figure near 50% as noise — that is what the *Not significant* verdict means.
 - Backtests include explicit frictions but remain simulations. Historical performance does not imply future results.
 - The portfolio database stores research preferences only and is not connected to a brokerage account.
 
@@ -185,4 +192,4 @@ SignalGlass is an engineering and product-design demonstration. It is not invest
 
 ## Resume-ready description
 
-> Built SignalGlass, an explainable Python/Streamlit market-research platform that compares linear, ridge, and random-forest signals with leakage-free walk-forward testing; added transaction-cost-aware backtesting, Sharpe/drawdown analysis, finance-domain news sentiment, persistent portfolio analytics, and a versioned JSON handoff for a C++ execution simulator.
+> Built SignalGlass, an explainable Python/Streamlit market-research platform that compares linear, ridge, and random-forest signals with leakage-free walk-forward testing and reports every result against a naive baseline with Wilson confidence intervals; added transaction-cost-aware backtesting, Sharpe/drawdown analysis, a 175-phrase finance sentiment engine with negation handling and per-headline evidence, persistent portfolio analytics, and a versioned JSON handoff for a C++ execution simulator.

@@ -70,6 +70,12 @@ def plotly_layout_defaults(*, height: int | None = None) -> dict[str, object]:
     return layout
 
 
+def build_styles() -> str:
+    """Return the stylesheet, so layout invariants can be asserted in tests."""
+
+    return _STYLES
+
+
 def apply_theme() -> None:
     """Install SignalGlass' responsive, accessible Streamlit stylesheet."""
 
@@ -190,7 +196,6 @@ a {{ color: var(--sg-cobalt); }}
 .sg-nav-item.is-active::after {{ content:""; position:absolute; left:0; right:0; bottom:-20px; height:2px; background:var(--sg-cobalt); }}
 .sg-status {{ display:flex; justify-content:flex-end; align-items:center; gap:.6rem; color:var(--sg-text-secondary); font-size:.8rem; }}
 .sg-status-dot {{ width:7px; height:7px; border-radius:50%; background:var(--sg-positive); box-shadow:0 0 10px rgba(81,212,122,.45); }}
-.sg-mobile-menu {{ display:none; color:var(--sg-text-secondary); font-size:1.45rem; }}
 
 /* Shared surfaces */
 .sg-panel {{
@@ -249,7 +254,12 @@ a {{ color: var(--sg-cobalt); }}
 .sg-score:first-child {{ border-left:0; }}
 .sg-score-label {{ color:var(--sg-text-secondary); font-size:.75rem; }}
 .sg-score-value {{ color:var(--sg-text); font-size:1.5rem; font-weight:630; margin-top:.25rem; }}
-.sg-score:first-child .sg-score-value {{ color:var(--sg-positive); font-size:2rem; }}
+.sg-score-headline {{ font-size:2rem; }}
+.sg-neutral-metric {{ color:var(--sg-warning) !important; }}
+.sg-score-verdict {{ font-size:1.05rem; }}
+.sg-headline-link {{ text-decoration:none; display:block; }}
+.sg-headline-link:hover {{ color:var(--sg-cobalt); text-decoration:underline; }}
+.sg-evidence-terms {{ color:var(--sg-text-secondary); font-size:.72rem; margin:.2rem 0 .1rem; }}
 
 .sg-driver {{ display:grid; grid-template-columns:48px minmax(0,1fr) 64px; gap:.8rem; align-items:center; padding:.72rem 0; border-bottom:1px solid var(--sg-border-soft); }}
 .sg-driver:last-child {{ border-bottom:0; }}
@@ -278,19 +288,18 @@ a {{ color: var(--sg-cobalt); }}
     width:auto !important;
     min-width:min(100%, 320px) !important;
   }}
-  .sg-header {{ grid-template-columns:1fr auto auto; margin:-.4rem -1rem .9rem; padding:0 1rem; backdrop-filter:none; -webkit-backdrop-filter:none; }}
-  .sg-nav {{ position:fixed; z-index:999; left:0; right:0; bottom:0; height:72px; display:grid; grid-template-columns:repeat(4,1fr); gap:0; border-top:1px solid var(--sg-border); background:rgba(5,14,24,.96); backdrop-filter:blur(20px); }}
-  .sg-nav-item {{ text-align:center; font-size:.69rem; padding-top:1.85rem; }}
+  .sg-header {{ grid-template-columns:1fr auto; margin:-.4rem -1rem .9rem; padding:0 1rem; backdrop-filter:none; -webkit-backdrop-filter:none; }}
+  .sg-nav {{ position:fixed; z-index:999; left:0; right:0; bottom:0; height:72px; display:grid; grid-template-columns:repeat(5,1fr); gap:0; border-top:1px solid var(--sg-border); background:rgba(5,14,24,.96); backdrop-filter:blur(20px); }}
+  .sg-nav-item {{ text-align:center; font-size:.66rem; padding-top:1.85rem; line-height:1.15; overflow-wrap:anywhere; }}
   .sg-nav-item.is-active::after {{ top:0; bottom:auto; left:30%; right:30%; }}
   .sg-status {{ font-size:.76rem; }}
   .sg-updated {{ display:none; }}
-  .sg-mobile-menu {{ display:block; }}
   .sg-hero {{ align-items:start; }}
   .sg-metrics {{ margin-top:.6rem; }}
   .sg-metric {{ padding:.1rem .45rem; }}
   .sg-metric-value {{ font-size:1.35rem; }}
   .sg-scorebar {{ grid-template-columns:repeat(2,1fr); gap:.9rem 0; }}
-  .sg-score:nth-child(3) {{ border-left:0; }}
+  .sg-score:nth-child(odd) {{ border-left:0; }}
   .sg-process {{ grid-template-columns:repeat(2,1fr); }}
 }}
 @media (max-width: 600px) {{
@@ -317,3 +326,6 @@ a {{ color: var(--sg-cobalt); }}
 }}
 </style>
 """
+
+
+__all__ = ["apply_theme", "build_styles", "inject_theme", "plotly_layout_defaults"]
