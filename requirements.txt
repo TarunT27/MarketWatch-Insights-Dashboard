@@ -1,6 +1,6 @@
 streamlit==1.59.2
 # Security floor for Streamlit's GitPython dependency.
-gitpython==3.1.58
+gitpython==3.1.59
 yfinance==1.5.1
 newsapi-python==0.2.7
 plotly==6.9.0
