@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from signalglass.ui._data import format_date, frame, html, value
+from signalglass.ui._data import format_date, frame, html, link, value
 from signalglass.ui.shell import render_page_title
 
 
@@ -59,7 +59,7 @@ def render_intelligence(bundle: Any, derived: Any = None) -> None:
             evidence = str(article.get("sentiment_evidence", "")).strip()
             evidence_copy = f" · Evidence: {evidence}" if evidence else ""
             parts.append(
-                f'<article class="sg-list-row"><div><div class="sg-list-title">{html(article.get("title", "Market update"))}</div><div class="sg-list-subtitle">{html(source)} · {html(format_date(article.get("publishedAt")))}</div></div><span class="sg-muted">{html(str(article.get("description", ""))[:96] + evidence_copy)}</span><span class="sg-tag {"neutral" if label == "Neutral" else ""}">{html(label)}</span></article>'
+                f'<article class="sg-list-row"><div>{link(article.get("title", "Market update"), article.get("url"))}<div class="sg-list-subtitle">{html(source)} · {html(format_date(article.get("publishedAt")))}</div></div><span class="sg-muted">{html(str(article.get("description", ""))[:96] + evidence_copy)}</span><span class="sg-tag {"neutral" if label == "Neutral" else ""}">{html(label)}</span></article>'
             )
         st.markdown("".join(parts), unsafe_allow_html=True)
 

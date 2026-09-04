@@ -42,7 +42,6 @@ def render_app_header(
           <div class="sg-brand"><span class="sg-brand-mark">{_wave_mark()}</span><span>SignalGlass</span></div>
           <nav class="sg-nav" aria-label="Primary navigation">{nav}</nav>
           <div class="sg-status"><span class="sg-status-dot" aria-hidden="true"></span><span>{escape(data_label)}</span>{updated}</div>
-          <span class="sg-mobile-menu" aria-label="Menu">☰</span>
         </header>
         """,
         unsafe_allow_html=True,

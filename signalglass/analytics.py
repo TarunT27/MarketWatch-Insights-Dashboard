@@ -198,6 +198,31 @@ def _build_signal_dataset(market_frame: pd.DataFrame) -> tuple[pd.DataFrame, np.
     return pair_data, features, targets
 
 
+def wilson_interval(successes: int, trials: int, *, z: float = 1.96) -> tuple[float, float]:
+    """Return a Wilson score interval, which stays valid at small sample sizes.
+
+    Directional accuracy is a proportion measured over few dozen sessions, where
+    the normal approximation is unreliable and can run past 0 or 1.
+    """
+
+    if trials <= 0:
+        return 0.0, 1.0
+    proportion = successes / trials
+    denominator = 1.0 + z**2 / trials
+    center = (proportion + z**2 / (2 * trials)) / denominator
+    margin = z / denominator * np.sqrt(proportion * (1.0 - proportion) / trials + z**2 / (4 * trials**2))
+    return float(max(0.0, center - margin)), float(min(1.0, center + margin))
+
+
+def majority_direction_baseline(actual_returns: np.ndarray) -> float:
+    """Accuracy of always predicting whichever direction occurred more often."""
+
+    if actual_returns.size == 0:
+        return 0.5
+    non_negative_share = float(np.mean(actual_returns >= 0))
+    return max(non_negative_share, 1.0 - non_negative_share)
+
+
 def _model_pipeline(model_name: str):
     if model_name == "linear":
         return Pipeline([("scale", StandardScaler()), ("regression", LinearRegression())])
@@ -251,9 +276,10 @@ def evaluate_directional_signal(
         columns=["date", "actual_return", "predicted_return"],
     )
     absolute_errors = np.abs(predictions["actual_return"] - predictions["predicted_return"])
-    direction_matches = np.sign(predictions["actual_return"].to_numpy()) == np.sign(
-        predictions["predicted_return"].to_numpy()
-    )
+    actual_returns = predictions["actual_return"].to_numpy()
+    direction_matches = np.sign(actual_returns) == np.sign(predictions["predicted_return"].to_numpy())
+    hits = int(direction_matches.sum())
+    accuracy_low, accuracy_high = wilson_interval(hits, len(predictions))
     return SignalEvaluation(
         predictions=predictions.reset_index(drop=True),
         mean_absolute_error=float(absolute_errors.mean()),
@@ -261,6 +287,9 @@ def evaluate_directional_signal(
         sample_size=len(predictions),
         latest_predicted_return=float(predictions["predicted_return"].iloc[-1]),
         model_name=model_name,
+        accuracy_low=accuracy_low,
+        accuracy_high=accuracy_high,
+        majority_baseline=majority_direction_baseline(actual_returns),
     )
 
 
@@ -294,6 +323,10 @@ def evaluate_model_suite(
                 {
                     "model": item.model_name,
                     "directional_accuracy": item.directional_accuracy,
+                    "accuracy_low": item.accuracy_low,
+                    "accuracy_high": item.accuracy_high,
+                    "majority_baseline": item.majority_baseline,
+                    "verdict": item.verdict,
                     "mean_absolute_error": item.mean_absolute_error,
                     "sample_size": item.sample_size,
                 }
@@ -307,10 +340,17 @@ def evaluate_model_suite(
         )
         .reset_index(drop=True)
     )
+    # The winner is chosen on the same windows it is scored on, so a lead that
+    # sits inside the runner-up's interval is selection noise, not skill.
+    selection_is_separable = bool(
+        len(leaderboard) < 2
+        or leaderboard.loc[0, "accuracy_low"] > leaderboard.loc[1, "directional_accuracy"]
+    )
     return ModelSuite(
         evaluations=evaluations,
         leaderboard=leaderboard,
         best_model=str(leaderboard.loc[0, "model"]),
+        selection_is_separable=selection_is_separable,
     )
 
 
@@ -318,6 +358,8 @@ __all__ = [
     "SENTIMENT_COLUMNS",
     "evaluate_directional_signal",
     "evaluate_model_suite",
+    "majority_direction_baseline",
     "merge_market_and_sentiment",
     "prepare_sentiment_summary",
+    "wilson_interval",
 ]

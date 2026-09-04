@@ -9,7 +9,16 @@ import pandas as pd
 import streamlit as st
 
 from signalglass.charts import make_overview_chart
-from signalglass.ui._data import company_name, format_compact, format_date, frame, html, records, value
+from signalglass.ui._data import (
+    company_name,
+    format_compact,
+    format_date,
+    frame,
+    html,
+    link,
+    records,
+    value,
+)
 
 
 def _snapshot(bundle: Any, derived: Any) -> dict[str, Any]:
@@ -42,10 +51,18 @@ def _snapshot(bundle: Any, derived: Any) -> dict[str, Any]:
             .mean()
         )
     )
-    quality = float(value(derived, "data_quality", "quality", default=96 if not prices.empty else 0))
+    quality = float(value(derived, "data_quality", "quality", default=0.0))
+    quality_detail = str(value(derived, "data_quality_summary", default="Measured over the loaded window"))
     return {
         "ticker": ticker,
-        "company": str(value(derived, "company", "company_name", default=company_name(ticker))),
+        "company": str(
+            value(
+                derived,
+                "company",
+                "company_name",
+                default=value(bundle, "company", default="") or company_name(ticker),
+            )
+        ),
         "prices": prices,
         "news": news,
         "latest": latest,
@@ -55,6 +72,7 @@ def _snapshot(bundle: Any, derived: Any) -> dict[str, Any]:
         "volatility": volatility,
         "pulse": pulse,
         "quality": quality,
+        "quality_detail": quality_detail,
     }
 
 
@@ -64,17 +82,16 @@ def _hero(snapshot: dict[str, Any]) -> None:
         f"""
         <section class="sg-hero" aria-label="Market snapshot">
           <div>
-            <div class="sg-symbol-line"><h1 class="sg-symbol">{html(snapshot["ticker"])}</h1><span class="sg-company">{html(snapshot["company"])}</span><span class="sg-company" aria-label="Watchlist">☆</span></div>
+            <div class="sg-symbol-line"><h1 class="sg-symbol">{html(snapshot["ticker"])}</h1><span class="sg-company">{html(snapshot["company"])}</span></div>
             <div class="sg-price">${snapshot["latest"]:,.2f}</div>
             <div class="sg-change {direction_class}">{snapshot["change"]:+.2f}&nbsp;&nbsp;{snapshot["percent"]:+.2f}%</div>
           </div>
-          <div class="sg-period" aria-label="Time range"><span>1M</span><span class="is-active">3M</span><span>6M</span><span>1Y</span></div>
         </section>
         <section class="sg-metrics" aria-label="Key market metrics">
           <div class="sg-metric"><div class="sg-metric-label">Volume</div><div class="sg-metric-value">{format_compact(snapshot["volume"])}</div></div>
           <div class="sg-metric"><div class="sg-metric-label">Volatility</div><div class="sg-metric-value">{snapshot["volatility"]:.1f}%</div></div>
           <div class="sg-metric"><div class="sg-metric-label">News pulse</div><div class="sg-metric-value {"sg-positive" if snapshot["pulse"] >= 0 else "sg-negative"}">{snapshot["pulse"]:+.2f}</div></div>
-          <div class="sg-metric"><div class="sg-metric-label">Data quality</div><div class="sg-metric-value">{snapshot["quality"]:.0f}%</div></div>
+          <div class="sg-metric" title="{html(snapshot["quality_detail"])}"><div class="sg-metric-label">Data quality</div><div class="sg-metric-value">{snapshot["quality"]:.0f}%</div></div>
         </section>
         """,
         unsafe_allow_html=True,
@@ -94,13 +111,20 @@ def _article_rows(items: list[dict[str, Any]], *, compact: bool = False) -> str:
         if compact:
             label = str(item.get("sentiment_label", "Neutral")).title()
             rendered.append(
-                f'<div class="sg-list-row"><div><div class="sg-list-title">{html(title)}</div><div class="sg-list-subtitle">{html(source)} · {html(format_date(published))}</div></div><span class="sg-muted">{html(item.get("description", "")[:72])}</span><span class="sg-tag {"neutral" if label == "Neutral" else ""}">{html(label)}</span></div>'
+                f'<div class="sg-list-row"><div>{link(title, item.get("url"))}<div class="sg-list-subtitle">{html(source)} · {html(format_date(published))}</div></div><span class="sg-muted">{html(item.get("description", "")[:72])}</span><span class="sg-tag {"neutral" if label == "Neutral" else ""}">{html(label)}</span></div>'
             )
         else:
             initial = str(source)[:1].upper()
             icon_class = "reuters" if "reuters" in str(source).lower() else ""
+            evidence_terms = str(item.get("sentiment_evidence", "")).strip()
+            evidence_line = (
+                f'<div class="sg-evidence-terms">Evidence: {html(evidence_terms)}</div>'
+                if evidence_terms
+                else '<div class="sg-evidence-terms">No scored finance phrases in this headline</div>'
+            )
+            story_link = link("View story  ›", item.get("url"), css_class="sg-link")
             rendered.append(
-                f'<article class="sg-evidence"><div class="sg-source-icon {icon_class}" aria-hidden="true">{html(initial)}</div><div><div class="sg-evidence-source">{html(source)}</div><div class="sg-evidence-title">{html(title)}</div><span class="sg-link">View story&nbsp; ›</span></div><time class="sg-evidence-date">{html(format_date(published))}</time></article>'
+                f'<article class="sg-evidence"><div class="sg-source-icon {icon_class}" aria-hidden="true">{html(initial)}</div><div><div class="sg-evidence-source">{html(source)}</div>{link(title, item.get("url"), css_class="sg-evidence-title")}{evidence_line}{story_link}</div><time class="sg-evidence-date">{html(format_date(published))}</time></article>'
             )
     return "".join(rendered)
 
@@ -162,7 +186,8 @@ def render_overview(bundle: Any, derived: Any = None) -> None:
         )
     with lower_right, st.container(border=True):
         st.markdown(
-            '<div class="sg-section-heading"><h2>Latest intelligence</h2><span class="sg-link">View all&nbsp; ›</span></div>'
+            '<div class="sg-section-heading"><h2>Latest intelligence</h2>'
+            '<a class="sg-link" href="?page=Intelligence" target="_self">View all&nbsp; ›</a></div>'
             + _article_rows(evidence, compact=True),
             unsafe_allow_html=True,
         )
